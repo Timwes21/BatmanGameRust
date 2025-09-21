@@ -3,7 +3,7 @@ use crate::sprites::get_sprites;
 use ggez::{Context, GameResult};
 use ggez::graphics::{Canvas, Color, DrawMode, DrawParam, Image, Mesh, Rect};
 use crate::game_defs::{ GRAVITY, Direction };
-use crate::enemy::{Enemy, Action};
+use crate::enemies::enemy::{Enemy, Action};
 
 
 
@@ -12,34 +12,34 @@ use crate::enemy::{Enemy, Action};
 
 
 pub struct KnifeGuy {
-    rough_x: f32,
-    precise_x: f32,
-    y: f32,
+    pub rough_x: f32,
+    pub precise_x: f32,
+    pub y: f32,
+    pub action: Action,
+    pub move_speed: f32,
+    pub counter: f32,
+    pub health: f32,
+    pub death: f32,
+    pub dead: bool,
+    pub direction: Direction,
+    pub sleep_direction: Direction,
     walking_sprites: Vec<Image>,
     standing_sprites: Vec<Image>,
-    attacking_sprites: Vec<Image>,
+    pub attacking_sprites: Vec<Image>,
     dying_sprites: Vec<Image>,
     sleeping_sprites: Vec<Image>,
-    action: Action,
-    move_speed: f32,
-    counter: f32,
-    health: f32,
-    death: f32,
-    dead: bool,
-    direction: Direction,
-    sleep_direction: Direction
 }
 
 impl KnifeGuy {
-    pub fn new(x: f32, y:f32, ctx: &mut Context) -> GameResult<Self>{
-        let walking_sprites = get_sprites("Mime/walking", 4, "walking", ctx)?;
-        let standing_sprites = get_sprites("Knife Guy/standing", 1, "standing", ctx)?;
-        let attacking_sprites = get_sprites("Knife Guy/stabbing", 5, "stab", ctx)?;
-        let dying_sprites = get_sprites("Knife Guy/die", 6, "die", ctx)?;
-        let sleeping_sprites = get_sprites("Knife Guy/sleep", 1, "sleep", ctx)?;
+    pub fn new(x: f32, y:f32, ctx: &mut Context) -> Self{
+        let walking_sprites   = get_sprites("Knife Guy/walking", 4, "walking", ctx);
+        let standing_sprites  = get_sprites("Knife Guy/standing", 1, "standing", ctx);
+        let attacking_sprites = get_sprites("Knife Guy/stabbing", 5, "stab", ctx);
+        let dying_sprites     = get_sprites("Knife Guy/die", 6, "die", ctx);
+        let sleeping_sprites  = get_sprites("Knife Guy/sleep", 1, "sleep", ctx);
 
 
-        Ok(Self{ rough_x: x, precise_x: x, y, walking_sprites, standing_sprites, attacking_sprites, dying_sprites, sleeping_sprites, action: Action::Standing, move_speed: 2.0, counter: 0.0, health: 100.0, death: 100.0, dead: false, direction: Direction::Right, sleep_direction: Direction::Right })
+        Self{ rough_x: x, precise_x: x, y, walking_sprites, standing_sprites, attacking_sprites, dying_sprites, sleeping_sprites, action: Action::Standing, move_speed: 2.0, counter: 0.0, health: 100.0, death: 100.0, dead: false, direction: Direction::Right, sleep_direction: Direction::Right }
     }    
 }
 
@@ -69,7 +69,7 @@ impl Enemy for KnifeGuy{
         
         
 
-        if self.health <= 0.0{
+        if self.health <= 0.0 {
             if self.action != Action::Dying {
                 self.reset_counter();
             }
@@ -107,24 +107,6 @@ impl Enemy for KnifeGuy{
         self.counter += 0.1;
     }
 
-    fn get_current_sprite(&mut self)-> &Image {
-        let a = self.counter.round() as usize;
-        let length = self.get_sprites().len() -1;
-        if a >= length { 
-            if self.action == Action::Dying{
-                self.dead = true;
-            }
-            if self.action == Action::Knockout{
-                self.action = Action::Sleep;
-            }
-            if self.action == Action::Sleep {
-                self.action = Action::Standing;
-            }
-            self.reset_counter();
-        }
-        &self.get_sprites()[self.counter.round() as usize]
-    }
-
 
     fn get_sprites(&self) -> &Vec<Image>{
         match self.action {
@@ -135,6 +117,15 @@ impl Enemy for KnifeGuy{
             Action::Knockout  => &self.dying_sprites,
             Action::Sleep     => &self.sleeping_sprites,
             _                 => &self.standing_sprites
+        }
+    }
+
+    fn end_conditions(&mut self) {
+        match self.action {
+            Action::Dying => self.dead = true,
+            Action::Knockout => self.action = Action::Sleep,
+            Action::Sleep => self.action = Action::Standing,
+            _ => {}
         }
     }
 
@@ -206,13 +197,18 @@ impl Enemy for KnifeGuy{
         !self.dead
     }
 
-     fn set_direction(&mut self, direction: Direction){
+    fn set_direction(&mut self, direction: Direction){
         self.direction = direction;
     }
 
     fn get_sleep_direction(&self)-> Direction{
         self.sleep_direction
     }
+
+    fn get_drawn_y(&self) ->f32{
+        self.get_y()
+    }
+
 
 }
 

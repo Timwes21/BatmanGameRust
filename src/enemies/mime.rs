@@ -3,7 +3,7 @@ use crate::sprites::get_sprites;
 use ggez::{Context, GameResult};
 use ggez::graphics::{Canvas, Color, DrawMode, DrawParam, Image, Mesh, Rect};
 use crate::game_defs::{ GRAVITY, Direction };
-use crate::enemy::{Enemy, Action};
+use crate::enemies::enemy::{Enemy, Action};
 
 
 
@@ -11,39 +11,47 @@ use crate::enemy::{Enemy, Action};
 
 
 
-pub struct KnifeGuy {
-    rough_x: f32,
-    precise_x: f32,
-    y: f32,
+pub struct Mime {
+    pub rough_x: f32,
+    pub precise_x: f32,
+    pub y: f32,
+    pub action: Action,
+    pub move_speed: f32,
+    pub counter: f32,
+    pub health: f32,
+    pub death: f32,
+    pub dead: bool,
+    pub direction: Direction,
+    pub knockout_counter: f32,
+    pub attack_counter: f32,
+    pub sleep_direction: Direction,
+    pub backflip_direction: Direction,
     walking_sprites: Vec<Image>,
     standing_sprites: Vec<Image>,
-    attacking_sprites: Vec<Image>,
+    pub attacking_sprites: Vec<Image>,
     dying_sprites: Vec<Image>,
     sleeping_sprites: Vec<Image>,
-    action: Action,
-    move_speed: f32,
-    counter: f32,
-    health: f32,
-    death: f32,
-    dead: bool,
-    direction: Direction,
-    sleep_direction: Direction
+    knockback_sprites: Vec<Image>,
+    backflip_sprites: Vec<Image>,
 }
 
-impl KnifeGuy {
-    pub fn new(x: f32, y:f32, ctx: &mut Context) -> GameResult<Self>{
-        let walking_sprites = get_sprites("Knife Guy/walking", 4, "walking", ctx)?;
-        let standing_sprites = get_sprites("Knife Guy/standing", 1, "standing", ctx)?;
-        let attacking_sprites = get_sprites("Knife Guy/stabbing", 5, "stab", ctx)?;
-        let dying_sprites = get_sprites("Knife Guy/die", 6, "die", ctx)?;
-        let sleeping_sprites = get_sprites("Knife Guy/sleep", 1, "sleep", ctx)?;
+impl Mime {
+    pub fn new(x: f32, y:f32, ctx: &mut Context) -> Self{
+        let walking_sprites   = get_sprites("Mime/walking", 4, "walking", ctx);
+        let standing_sprites  = get_sprites("Mime/standing", 1, "standing", ctx);
+        let attacking_sprites = get_sprites("Mime/kick", 4, "kick", ctx);
+        let dying_sprites     = get_sprites("Mime/die", 4, "die", ctx);
+        let sleeping_sprites  = get_sprites("Mime/sleep", 1, "sleep", ctx);
+        let knockback_sprites = get_sprites("Mime/knockback", 3, "knockback", ctx);
+        let backflip_sprites = get_sprites("Mime/backflip", 6, "backflip", ctx);
 
 
-        Ok(Self{ rough_x: x, precise_x: x, y, walking_sprites, standing_sprites, attacking_sprites, dying_sprites, sleeping_sprites, action: Action::Standing, move_speed: 2.0, counter: 0.0, health: 100.0, death: 100.0, dead: false, direction: Direction::Right, sleep_direction: Direction::Right })
+
+        Self{ rough_x: x, precise_x: x, y, walking_sprites, standing_sprites, attacking_sprites, dying_sprites, sleeping_sprites, knockback_sprites, backflip_sprites, action: Action::Standing, move_speed: 2.0, counter: 0.0, health: 100.0, death: 100.0, dead: false, direction: Direction::Right, knockout_counter: 0.0, attack_counter: 0.0, sleep_direction: Direction::Right, backflip_direction: Direction::Left } 
     }    
 }
 
-impl Enemy for KnifeGuy{
+impl Enemy for Mime {
 
     fn movement(&mut self, batman:&mut Batman){
         let player_x = batman.get_x();
@@ -66,28 +74,51 @@ impl Enemy for KnifeGuy{
         let out_of_range_left = enemys_right_side < player_left - detection_range;
         let out_of_range_right = enemys_left_side > player_right + detection_range;
 
-        
+        let enemy_on_left = self.get_mid_point() < batman.get_mid_point() && batman.get_mid_point() - 150.0 < self.get_mid_point();
+        let enemy_on_right = batman.get_mid_point() < self.get_mid_point() && self.get_mid_point() < batman.get_mid_point() + 150.0;
+
+        if batman.direction() == Direction::Left && enemy_on_left || batman.direction() == Direction::Right && enemy_on_right {
+            let knockback = batman.attack(&mut self.health);
+            
+            if knockback && self.action != Action::Knockback {
+                self.action = Action::Knockback;
+                self.counter = 0.0;
+            }
+            if batman.is_attacking() && !matches!(self.action, Action::Backflip | Action::Sleep){
+                self.action = Action::Backflip;
+                self.counter = 0.0;
+                self.backflip_direction = self.direction;
+    
+            } 
+        }
+
         
 
-        if self.health <= 0.0 {
+        if self.health <= 0.0{
             if self.action != Action::Dying {
                 self.reset_counter();
             }
             self.action = Action::Dying;
         }
         else if self.action == Action::Knockout || self.action == Action::Sleep {
-            if self.counter.round() as usize >= self.get_sprites().len()-1 {
-                self.action = Action::Standing;
+            if self.action == Action::Sleep {
+                self.knockout_counter += 0.2;
+                if self.knockout_counter >= 20.0 {
+                    self.action = Action::Standing;
+                    self.knockout_counter = 0.0;
+                }
             }
+        }
+        else if self.action == Action::Backflip {
+            let backflip_speed = 3.0;
+            self.rough_x += if self.backflip_direction == Direction::Left { backflip_speed } else { -backflip_speed };
+
         }
         else if enemy_in_detection_range_left || enemy_in_detection_range_right {
             self.rough_x += if enemy_in_detection_range_left { self.move_speed } else { -self.move_speed };
             self.action = Action::Walking;
         }
-        else if out_of_range_left || out_of_range_right {
-            self.action = Action::Standing;
-        }
-        else if batman.is_grounded() {
+        else if batman.is_grounded() && self.attack_counter.round() >= 20.0{
             self.action = Action::Attacking;
             if self.rough_x < batman.get_mid_point() && batman.direction() == Direction::Left{
                 batman.attack(&mut self.health);
@@ -97,8 +128,12 @@ impl Enemy for KnifeGuy{
             }
             
         }
+        else if out_of_range_left || out_of_range_right {
+            self.action = Action::Standing;
+        }
         else {
             self.action = Action::Standing;
+            self.attack_counter += 0.3;
         }
         
         if self.action == Action::Attacking && self.counter.round() as usize == 2{
@@ -107,26 +142,8 @@ impl Enemy for KnifeGuy{
         self.counter += 0.1;
     }
 
-    fn get_current_sprite(&mut self)-> &Image {
-        let a = self.counter.round() as usize;
-        let length = self.get_sprites().len() -1;
-        if a >= length { 
-            if self.action == Action::Dying{
-                self.dead = true;
-            }
-            if self.action == Action::Knockout{
-                self.action = Action::Sleep
-            }
-            if self.action == Action::Sleep {
-                self.action = Action::Standing;
-            }
-            self.reset_counter();
-        }
-        &self.get_sprites()[self.counter.round() as usize]
-    }
 
-
-    fn get_sprites(&self) -> &Vec<Image>{
+    fn get_sprites(&self) -> &Vec<Image> {
         match self.action {
             Action::Walking   => &self.walking_sprites,
             Action::Standing  => &self.standing_sprites,
@@ -134,7 +151,18 @@ impl Enemy for KnifeGuy{
             Action::Dying     => &self.dying_sprites,
             Action::Knockout  => &self.dying_sprites,
             Action::Sleep     => &self.sleeping_sprites,
+            Action::Backflip  => &self.backflip_sprites,
             _                 => &self.standing_sprites
+        }
+    }
+
+    fn end_conditions(&mut self) {
+        match self.action {
+            Action::Dying => self.dead = true,
+            Action::Knockout  => { self.set_action(Action::Sleep); self.sleep_direction = self.direction; },
+            Action::Backflip => self.action = Action::Standing,
+            Action::Attacking => { self.attack_counter = 0.0 }
+            _ => {}
         }
     }
 
@@ -213,6 +241,11 @@ impl Enemy for KnifeGuy{
     fn get_sleep_direction(&self)-> Direction{
         self.sleep_direction
     }
+
+    fn get_drawn_y(&self) ->f32{
+        self.get_y()
+    }
+
 
 }
 

@@ -7,16 +7,12 @@ mod game_defs;
 mod batman;
 mod sprites;
 mod game;
-mod knife_guy;
-mod gun_guy;
-mod enemy;
-mod mime;
 mod enemies;
+mod projectiles;
+
 
 use crate::game_defs::{WIDTH, HEIGHT};
 
-
-// `test!` will compare `$left` and `$right`
 
 
 fn main() -> GameResult {

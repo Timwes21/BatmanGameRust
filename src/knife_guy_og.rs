@@ -19,7 +19,7 @@ enum Action {
 
 
 
-pub struct Enemy {
+pub struct GunGuyOG {
     rough_x: f32,
     precise_x: f32,
     y: f32,
@@ -36,7 +36,7 @@ pub struct Enemy {
     dead: bool
 }
 
-impl Enemy {
+impl GunGuyOG {
     pub fn new(x: f32, y:f32, ctx: &mut Context) -> GameResult<Self>{
         let walking_sprites = get_sprites("Knife Guy/walking", 4, "walking", ctx)?;
         let standing_sprites = get_sprites("Knife Guy/standing", 1, "standing", ctx)?;

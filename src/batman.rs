@@ -19,6 +19,7 @@ enum Action {
     Kicking1,
     Kicking2,
     Throwing,
+    SuperPunch
 }
 
 
@@ -36,6 +37,7 @@ pub struct Batman {
     kicking1_sprites: Vec<Image>,
     kicking2_sprites: Vec<Image>,
     throwing_sprites: Vec<Image>,
+    super_punch_sprites: Vec<Image>,
     counter: f32,
     action: Action,
     direction: Direction,
@@ -53,15 +55,17 @@ pub struct Batman {
 impl Batman {
     pub fn new(x: f32, y: f32, move_speed: f32, ctx: &mut Context, health: f32) -> GameResult<Self>{
 
-        let running_sprites:   Vec<Image> = sprites::get_sprites("Batman running", 22, "running", ctx)?;
-        let standing_sprites:  Vec<Image> = sprites::get_sprites("Batman standing", 16, "standing", ctx)?;
-        let jumping_sprites:   Vec<Image> = sprites::get_sprites("Batman jumping", 7, "jump", ctx)?;
-        let punching1_sprites: Vec<Image> = sprites::get_sprites("Batman punching1", 11, "punch", ctx)?;
-        let punching2_sprites: Vec<Image> = sprites::get_sprites("Batman punching2", 10, "punch", ctx)?;
-        let punching3_sprites: Vec<Image> = sprites::get_sprites("Batman punching3", 10, "punch", ctx)?;
-        let kicking1_sprites:  Vec<Image> = sprites::get_sprites("Batman kicking1", 9, "kick", ctx)?;
-        let kicking2_sprites:  Vec<Image> = sprites::get_sprites("Batman kicking2", 10, "kick", ctx)?;
-        let throwing_sprites:  Vec<Image> = sprites::get_sprites("Batman Throwing", 19, "throw", ctx)?;
+        let running_sprites:      Vec<Image> = sprites::get_sprites("Batman running", 22, "running", ctx);
+        let standing_sprites:     Vec<Image> = sprites::get_sprites("Batman standing", 16, "standing", ctx);
+        let jumping_sprites:      Vec<Image> = sprites::get_sprites("Batman jumping", 7, "jump", ctx);
+        let punching1_sprites:    Vec<Image> = sprites::get_sprites("Batman punching1", 11, "punch", ctx);
+        let punching2_sprites:    Vec<Image> = sprites::get_sprites("Batman punching2", 10, "punch", ctx);
+        let punching3_sprites:    Vec<Image> = sprites::get_sprites("Batman punching3", 10, "punch", ctx);
+        let kicking1_sprites:     Vec<Image> = sprites::get_sprites("Batman kicking1", 9, "kick", ctx);
+        let kicking2_sprites:     Vec<Image> = sprites::get_sprites("Batman kicking2", 10, "kick", ctx);
+        let throwing_sprites:     Vec<Image> = sprites::get_sprites("Batman Throwing", 19, "throw", ctx);
+        let super_punch_sprites:  Vec<Image> = sprites::get_sprites("Batman smoke", 13, "smoke", ctx);
+        
         let batman = Self{ 
             x, 
             y, 
@@ -76,6 +80,7 @@ impl Batman {
             kicking1_sprites,
             kicking2_sprites,
             throwing_sprites,
+            super_punch_sprites,
             counter: 0.0, 
             action: Action::Standing, 
             direction: Direction::Left, 
@@ -157,9 +162,6 @@ impl Batman {
             .dest([0.0, 10.0])
         );
 
-        // canvas.draw(&x, DrawParam::default()
-        //     .dest([0.0, 10.0])
-        // );
 
     }
 
@@ -197,7 +199,7 @@ impl Batman {
             self.x -= self.move_speed;
             if self.is_grounded() {
                 self.action = Action::Running;
-                self.incr = 0.3;
+                self.incr = 0.35;
             }
             if self.action == Action::Running && self.counter.round() as usize == self.get_sprites().len()-1{
                 self.counter = 3.0;
@@ -233,6 +235,9 @@ impl Batman {
             }
 
             self.punching = true;
+        }
+        else if keyboard::is_key_pressed(ctx, KeyCode::D){
+            self.action = Action::SuperPunch;
         }
         else if keyboard::is_key_pressed(ctx, KeyCode::S){
             if self.action == Action::Kicking1 && self.counter.round() as usize >= self.get_sprites().len()-5 {
@@ -306,6 +311,7 @@ impl Batman {
             }
             if self.action == Action::Throwing{
                 self.action = Action::Standing;
+                self.can_spawn_batarang = true;
             }
         }
 
@@ -315,15 +321,16 @@ impl Batman {
 
     fn get_sprites(&self) -> &Vec<Image>{
         match self.action {
-            Action::Running   => &self.running_sprites,
-            Action::Jumping   => &self.jumping_sprites,
-            Action::Standing  => &self.standing_sprites,
-            Action::Punching1 => &self.punching1_sprites,
-            Action::Punching2 => &self.punching2_sprites,
-            Action::Punching3 => &self.punching3_sprites,
-            Action::Kicking1  => &self.kicking1_sprites,
-            Action::Kicking2  => &self.kicking2_sprites,
-            Action::Throwing  => &self.throwing_sprites,
+            Action::Running    => &self.running_sprites,
+            Action::Jumping    => &self.jumping_sprites,
+            Action::Standing   => &self.standing_sprites,
+            Action::Punching1  => &self.punching1_sprites,
+            Action::Punching2  => &self.punching2_sprites,
+            Action::Punching3  => &self.punching3_sprites,
+            Action::Kicking1   => &self.kicking1_sprites,
+            Action::Kicking2   => &self.kicking2_sprites,
+            Action::Throwing   => &self.throwing_sprites,
+            Action::SuperPunch => &self.super_punch_sprites
         }
     }
     
@@ -361,27 +368,36 @@ impl Batman {
 
     }
 
-    pub fn attack(&mut self, enemy_health:&mut f32){
+    pub fn attack(&mut self, enemy_health:&mut f32)->bool{
         let hit_damage = 3.0;
         let kick_damage = 5.0;
         if self.action == Action::Punching1 && self.counter.round() as usize == 2 {
             *enemy_health -= hit_damage;
+            return true
         }
         if self.action == Action::Punching2 && self.counter.round() as usize == 2 {
             *enemy_health -= hit_damage;
+            return true
         }
         if self.action == Action::Punching3 && self.counter.round() as usize == 2 {
             *enemy_health -= kick_damage;
+            return true
         }
         if self.action == Action::Kicking1 && self.counter.round() as usize == 2{
             *enemy_health -= kick_damage;
+            return true
         }
         if self.action == Action::Kicking2 && self.counter.round() as usize == 2{
             *enemy_health -= kick_damage;
-            
+            return true
         }
+        if self.action == Action::Throwing && self.counter.round() as usize == 4{
+                
+        }
+        false
 
     }
+    
 
 
     pub fn direction(&self)-> Direction{
@@ -391,6 +407,10 @@ impl Batman {
 
     pub fn is_alive(&self)->bool{
         self.health > 0.0
+    }
+
+    pub fn is_attacking(&self)-> bool{
+        matches!(self.action, Action::Kicking1 | Action::Punching1 | Action::Punching2 | Action::Punching3 | Action::Kicking2)
     }
 
 }
@@ -412,7 +432,7 @@ pub struct Batarang {
 impl Batarang {
     fn new(x: f32, y: f32, direction: Direction, ctx: &mut Context)->GameResult<Self>{
         let adjusted_y = y + 55.0;
-        let sprites: Vec<Image> = sprites::get_sprites("Batarang", 4, "batarang", ctx)?;
+        let sprites: Vec<Image> = sprites::get_sprites("Batarang", 4, "batarang", ctx);
         let scale = if direction == Direction::Left { -SCALE } else { SCALE };
         Ok(Self{ x, y: adjusted_y, counter: 0.0, move_speed: 15.0, direction, sprites, scale })
     }

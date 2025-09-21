@@ -1,107 +1,123 @@
 use crate::batman::{Batarang, Batman};
-use crate::gun_guy;
+use crate::enemies::Enemies;
+use crate::projectiles::{self, Projectile};
 use crate::sprites::get_sprites;
 use ggez::{Context, GameResult};
-use ggez::graphics::{Canvas, Color, DrawMode, DrawParam, Image, Mesh, MeshBuilder, Rect};
-use crate::game_defs::{ GRAVITY, Direction };
-use crate::enemy::{Enemy, Action};
-use crate::game_defs::WIDTH;
+use ggez::graphics::{Canvas, Color, DrawMode, DrawParam, Image, Mesh, Rect};
+use crate::game_defs::{ GRAVITY, WIDTH, Direction };
+use crate::enemies::enemy::{Enemy, Action, EnemyBase};
 
 
 
-pub struct GunGuy {
-    rough_x: f32,
-    precise_x: f32,
-    y: f32,
+
+
+
+
+pub struct AxeGuy {
+    pub enemy_base: EnemyBase,
+    pub throwing_counter: f32,
+    pub can_spawn_axe: bool,
+    pub attacking_sprites: Vec<Image>,
     walking_sprites: Vec<Image>,
     standing_sprites: Vec<Image>,
-    attacking_sprites: Vec<Image>,
+    throwing_sprites: Vec<Image>,
     dying_sprites: Vec<Image>,
     sleeping_sprites: Vec<Image>,
-    action: Action,
-    move_speed: f32,
-    counter: f32,
-    health: f32,
-    death: f32,
-    dead: bool,
-    shooting_interval: f32,
-    direction: Direction,
-    knockout_counter: f32,
-    sleep_direction: Direction
+    knockback_sprites: Vec<Image>,
 }
 
-impl GunGuy {
-    pub fn new(x: f32, y:f32, ctx: &mut Context) -> GameResult<Self>{
-        let walking_sprites = get_sprites("Gun Guy/walking", 4, "walking", ctx)?;
-        let standing_sprites = get_sprites("Gun Guy/standing", 1, "standing", ctx)?;
-        let attacking_sprites = get_sprites("Gun Guy/shooting", 3, "shooting", ctx)?;
-        let dying_sprites = get_sprites("Gun Guy/die", 4, "die", ctx)?;
-        let sleeping_sprites = get_sprites("Gun Guy/sleep", 1, "sleep", ctx)?;
+impl AxeGuy {
+    pub fn new(x: f32, y:f32, ctx: &mut Context) -> Self{
+        let walking_sprites   = get_sprites("Axe Guy/walking", 6, "walking", ctx);
+        let standing_sprites  = get_sprites("Axe Guy/standing", 1, "standing", ctx);
+        let attacking_sprites = get_sprites("Axe Guy/swing", 4, "swing", ctx);
+        let throwing_sprites  = get_sprites("Axe Guy/throw", 5, "throw", ctx);
+        let dying_sprites     = get_sprites("Axe Guy/die", 3, "die", ctx);
+        let sleeping_sprites  = get_sprites("Axe Guy/sleep", 1, "sleep", ctx);
+        let knockback_sprites = get_sprites("Axe Guy/knockback", 1, "knockback", ctx);
 
 
-        Ok(Self{ rough_x: x, precise_x: x, y, walking_sprites, standing_sprites, attacking_sprites, dying_sprites, sleeping_sprites, action: Action::Standing, move_speed: 2.0, counter: 0.0, health: 100.0, death: 100.0, dead: false, shooting_interval: 0.0, direction: Direction::Left, knockout_counter: 0.0, sleep_direction: Direction::Left })
+        Self{ 
+            rough_x: x, 
+            precise_x: x, 
+            y, 
+            action: Action::Standing, 
+            move_speed: 2.0, 
+            counter: 0.0, 
+            health: 100.0, 
+            death: 100.0, 
+            dead: false, 
+            direction: Direction::Right, 
+            sleep_direction: Direction::Right, 
+            knockout_counter: 0.0, 
+            throwing_counter: 0.0, 
+            can_spawn_axe: false, 
+            walking_sprites, 
+            standing_sprites, 
+            attacking_sprites, 
+            throwing_sprites, 
+            dying_sprites, 
+            sleeping_sprites, 
+            knockback_sprites, 
+        }
     }    
 
-    pub fn add_bullets(&mut self, bullets: &mut Vec<Bullet>){
-        if self.action == Action::Attacking && self.counter.round() == 1.0{
+    pub fn add_axes(&mut self, projectiles: &mut Vec<Projectile>){
+        if self.action == Action::Throwing && self.counter.round() == 1.0 && self.can_spawn_axe{
             let x = if self.direction == Direction::Left{ self.precise_x + self.get_current_sprite().width() as f32} else {self.precise_x};
-            let bullet_res = Bullet::new(x, self.y, self.direction);
+            let axe_res = Axe::new(x, self.y, self.direction);
             
-            let bullet = match bullet_res {
+            let axe = match axe_res {
                 Ok(m)=> m,
                 Err(e)=>{println!("{}", e); return;}
             };
             
-            bullets.push(bullet);
+            projectiles.push(Projectile::Axe(axe));
+            self.can_spawn_axe = false;
 
 
         }
     }
 }
 
-
-impl Enemy for GunGuy{
+impl Enemy for AxeGuy{
     fn movement(&mut self, batman:&mut Batman){
         let player_x = batman.get_x();
         let player_width = batman.get_current_sprite().width() as f32 * 3.2;
+        
 
         let detection_range = 600.0;
 
 
-        let enemys_right_side = self.rough_x + self.get_current_sprite().width() as f32 * 3.2;
+        let enemys_right_side = self.rough_x + self.get_width();
         let enemys_left_side = self.rough_x;
 
         let player_left = player_x + 50.0;
         let player_right = player_x + player_width - 50.0;
 
 
-        let outside_of_shoooting_range_left = enemys_right_side < player_left - detection_range;
-        let outside_of_shoooting_range_right = enemys_left_side > player_right + detection_range;
+        let enemy_in_detection_range_left = enemys_right_side < player_left && enemys_right_side > player_left - detection_range;
+        let enemy_in_detection_range_right = enemys_left_side > player_right && enemys_left_side < player_right + detection_range;
 
+        let out_of_range_left = enemys_right_side < player_left - detection_range;
+        let out_of_range_right = enemys_left_side > player_right + detection_range;
 
         let enemy_on_left = self.get_mid_point() < batman.get_mid_point() && batman.get_mid_point() - 150.0 < self.get_mid_point();
         let enemy_on_right = batman.get_mid_point() < self.get_mid_point() && self.get_mid_point() < batman.get_mid_point() + 150.0;
-        
-        
-        if batman.direction() == Direction::Left && enemy_on_left  {
-            batman.attack(&mut self.health);
-        }
-        if batman.direction() == Direction::Right && enemy_on_right{
+
+        if batman.direction() == Direction::Left && enemy_on_left || batman.direction() == Direction::Right && enemy_on_right {
             batman.attack(&mut self.health);
         }
         
 
-
-
-        if self.health <= 0.0{
+        if self.health <= 0.0 {
             if self.action != Action::Dying {
                 self.reset_counter();
             }
             self.action = Action::Dying;
         }
-        else if self.action == Action::Knockout || self.action == Action::Sleep {
+        else if matches!(self.action, Action::Knockout | Action::Sleep | Action::Knockback) {
             if self.action == Action::Sleep{
-                
                 self.knockout_counter += 0.2;
                 if self.knockout_counter >= 20.0 {
                     self.action = Action::Standing;
@@ -110,53 +126,54 @@ impl Enemy for GunGuy{
             }
 
         }
-        else if self.shooting_interval.round() >= 20.0{
-            self.action = Action::Attacking;
-        }
-        else if outside_of_shoooting_range_left {
-            self.rough_x += self.move_speed;
+        else if enemy_in_detection_range_left || enemy_in_detection_range_right {
+            self.rough_x += if enemy_in_detection_range_left { self.move_speed } else { -self.move_speed };
             self.action = Action::Walking;
-            self.direction = Direction::Right;
         }
-        else if outside_of_shoooting_range_right {
-            self.rough_x -= self.move_speed;
-            self.action = Action::Walking;
-            self.direction = Direction::Left;
+        else if out_of_range_left || out_of_range_right {
+            self.throwing_counter += 0.2;
+            if self.throwing_counter.round() >= 20.0 {
+                self.action = Action::Throwing;
+            }
+            else {
+                self.action = Action::Standing;
+            }
         }
         else {
             self.action = Action::Standing;
-            self.shooting_interval += 0.1;
+        }
+        
+        if self.action == Action::Attacking && self.counter.round() as usize == 2{
+            batman.take_damage(0.1);
         }
         self.counter += 0.1;
-    
     }
+
+
 
     fn get_sprites(&self) -> &Vec<Image>{
         match self.action {
             Action::Walking   => &self.walking_sprites,
-            Action::Standing  => &self.standing_sprites,
             Action::Attacking => &self.attacking_sprites,
-            Action::Dying     => &self.dying_sprites,
+            Action::Dying | 
             Action::Knockout  => &self.dying_sprites,
             Action::Sleep     => &self.sleeping_sprites,
+            Action::Throwing  => &self.throwing_sprites,
             _                 => &self.standing_sprites
         }
     }
 
-    fn get_current_sprite(&mut self)-> &Image {
-        let a = self.get_counter().round() as usize;
-        let length = self.get_sprites().len() -1;
-        if a >= length { 
-            let action = self.get_action();
-            match action {
-                Action::Dying     => { self.set_dead(true); },
-                Action::Knockout  => { self.set_action(Action::Sleep); self.sleep_direction = self.direction; },
-                Action::Attacking => { self.action = Action::Standing; self.shooting_interval = 0.0; }
-                _ => {}
-            }
-            self.reset_counter();
+    fn end_conditions(&mut self) {
+        match self.action {
+            Action::Dying    => self.dead = true,
+            Action::Knockout => { self.set_action(Action::Sleep); self.sleep_direction = self.direction; },
+            Action::Throwing => { self.throwing_counter = 0.0; self.can_spawn_axe = true },
+            _                => {}
         }
-        &self.get_sprites()[self.get_counter().round() as usize]
+    }
+
+    fn get_enemy_base(&mut self) -> EnemyBase {
+        
     }
 
 
@@ -236,12 +253,15 @@ impl Enemy for GunGuy{
         self.sleep_direction
     }
 
+    fn get_drawn_y(&self) ->f32{
+        self.get_y()
+    }
+
+
 }
 
 
-
-
-pub struct Bullet{
+pub struct Axe{
     x: f32,
     y: f32,
     direction: Direction,
@@ -249,7 +269,7 @@ pub struct Bullet{
 }
 
 
-impl Bullet {
+impl Axe {
     fn new(x:f32, y:f32, direction: Direction)-> GameResult<Self>{
         let adjusted_y = y + 30.0;
         Ok(Self { x, y: adjusted_y, direction, move_speed: 10.0 })
@@ -277,7 +297,7 @@ impl Bullet {
         let batman_mid_point = batman.get_mid_point().round();
         let bullet_x = self.x.round();
         if bullet_x >= batman_mid_point - 20.0 && batman_mid_point + 20.0 >= bullet_x && batman.is_grounded(){
-            batman.take_damage(3.0);
+            batman.take_damage(0.8);
             true
         }
         else {
@@ -285,3 +305,8 @@ impl Bullet {
         }
     }
 }
+
+
+
+
+
