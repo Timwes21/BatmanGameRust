@@ -1,11 +1,11 @@
-use crate::batman::{Batarang, Batman};
-use crate::enemies::Enemies;
-use crate::projectiles::{self, Projectile};
+use crate::batman::Batman;
+use crate::projectiles::Projectiles;
 use crate::sprites::get_sprites;
-use ggez::{Context, GameResult};
-use ggez::graphics::{Canvas, Color, DrawMode, DrawParam, Image, Mesh, Rect};
-use crate::game_defs::{ GRAVITY, WIDTH, Direction };
-use crate::enemies::enemy::{Enemy, Action, EnemyBase};
+use ggez::Context;
+use ggez::graphics::Image;
+use crate::game_defs::Direction;
+use crate::enemies::enemy::{Enemy, Action};
+use crate::projectiles::Axe;
 
 
 
@@ -14,7 +14,18 @@ use crate::enemies::enemy::{Enemy, Action, EnemyBase};
 
 
 pub struct AxeGuy {
-    pub enemy_base: EnemyBase,
+    pub rough_x: f32,
+    pub precise_x: f32,
+    pub y: f32,
+    pub action: Action,
+    pub move_speed: f32,
+    pub counter: f32,
+    pub health: f32,
+    pub death: f32,
+    pub dead: bool,
+    pub direction: Direction,
+    pub knockout_counter: f32,
+    pub sleep_direction: Direction,
     pub throwing_counter: f32,
     pub can_spawn_axe: bool,
     pub attacking_sprites: Vec<Image>,
@@ -23,56 +34,49 @@ pub struct AxeGuy {
     throwing_sprites: Vec<Image>,
     dying_sprites: Vec<Image>,
     sleeping_sprites: Vec<Image>,
-    knockback_sprites: Vec<Image>,
 }
 
 impl AxeGuy {
-    pub fn new(x: f32, y:f32, ctx: &mut Context) -> Self{
+    pub fn new(x: f32, y:f32, move_speed: f32, ctx: &mut Context) -> Self{
         let walking_sprites   = get_sprites("Axe Guy/walking", 6, "walking", ctx);
         let standing_sprites  = get_sprites("Axe Guy/standing", 1, "standing", ctx);
         let attacking_sprites = get_sprites("Axe Guy/swing", 4, "swing", ctx);
         let throwing_sprites  = get_sprites("Axe Guy/throw", 5, "throw", ctx);
         let dying_sprites     = get_sprites("Axe Guy/die", 3, "die", ctx);
         let sleeping_sprites  = get_sprites("Axe Guy/sleep", 1, "sleep", ctx);
-        let knockback_sprites = get_sprites("Axe Guy/knockback", 1, "knockback", ctx);
+        // let knockback_sprites = get_sprites("Axe Guy/knockback", 1, "knockback", ctx);
 
 
-        Self{ 
+        Self { 
             rough_x: x, 
             precise_x: x, 
             y, 
+            standing_sprites, 
+            attacking_sprites, 
+            dying_sprites, 
+            sleeping_sprites, 
             action: Action::Standing, 
-            move_speed: 2.0, 
+            move_speed, 
             counter: 0.0, 
             health: 100.0, 
             death: 100.0, 
             dead: false, 
             direction: Direction::Right, 
-            sleep_direction: Direction::Right, 
+            sleep_direction: Direction::Right,
+            throwing_counter: 0.0,
             knockout_counter: 0.0, 
-            throwing_counter: 0.0, 
             can_spawn_axe: false, 
             walking_sprites, 
-            standing_sprites, 
-            attacking_sprites, 
             throwing_sprites, 
-            dying_sprites, 
-            sleeping_sprites, 
-            knockback_sprites, 
         }
     }    
 
-    pub fn add_axes(&mut self, projectiles: &mut Vec<Projectile>){
+    pub fn add_axes(&mut self, projectiles: &mut Vec<Projectiles>){
         if self.action == Action::Throwing && self.counter.round() == 1.0 && self.can_spawn_axe{
             let x = if self.direction == Direction::Left{ self.precise_x + self.get_current_sprite().width() as f32} else {self.precise_x};
-            let axe_res = Axe::new(x, self.y, self.direction);
+            let axe = Axe::new(x, self.y, self.direction);
             
-            let axe = match axe_res {
-                Ok(m)=> m,
-                Err(e)=>{println!("{}", e); return;}
-            };
-            
-            projectiles.push(Projectile::Axe(axe));
+            projectiles.push(Projectiles::Axe(axe));
             self.can_spawn_axe = false;
 
 
@@ -166,14 +170,10 @@ impl Enemy for AxeGuy{
     fn end_conditions(&mut self) {
         match self.action {
             Action::Dying    => self.dead = true,
-            Action::Knockout => { self.set_action(Action::Sleep); self.sleep_direction = self.direction; },
+            Action::Knockout => { self.action = Action::Sleep; self.sleep_direction = self.direction; },
             Action::Throwing => { self.throwing_counter = 0.0; self.can_spawn_axe = true },
             _                => {}
         }
-    }
-
-    fn get_enemy_base(&mut self) -> EnemyBase {
-        
     }
 
 
@@ -257,56 +257,14 @@ impl Enemy for AxeGuy{
         self.get_y()
     }
 
+    fn get_knockout_counter(&self)-> f32 {
+        self.knockout_counter
+    }
+
+    fn set_knockout_counter(&mut self, new_counter: f32) {
+        self.knockout_counter = new_counter;
+    }
+
+
 
 }
-
-
-pub struct Axe{
-    x: f32,
-    y: f32,
-    direction: Direction,
-    move_speed: f32
-}
-
-
-impl Axe {
-    fn new(x:f32, y:f32, direction: Direction)-> GameResult<Self>{
-        let adjusted_y = y + 30.0;
-        Ok(Self { x, y: adjusted_y, direction, move_speed: 10.0 })
-    }
-
-    pub fn update(&mut self){
-        self.x += if self.direction == Direction::Left { -self.move_speed } else { self.move_speed };
-    }
-
-    pub fn draw(& mut self, canvas:&mut  Canvas, ctx: &Context)-> GameResult{
-        let bullet = Mesh::new_circle(ctx, DrawMode::fill(), [self.x, self.y], 15.0, 0.1, Color::from_rgb(0, 0, 0))?;
-
-        canvas.draw(&bullet, DrawParam::default()
-            .dest([0.0, 10.0])
-        );
-
-        Ok(())
-    }
-
-    pub fn is_offscreen(&self) -> bool{
-        if self.x > WIDTH || self.x < 0.0{ true } else { false }
-    }
-
-    pub fn hit_batman(&self, batman: &mut Batman)-> bool{
-        let batman_mid_point = batman.get_mid_point().round();
-        let bullet_x = self.x.round();
-        if bullet_x >= batman_mid_point - 20.0 && batman_mid_point + 20.0 >= bullet_x && batman.is_grounded(){
-            batman.take_damage(0.8);
-            true
-        }
-        else {
-            false
-        }
-    }
-}
-
-
-
-
-

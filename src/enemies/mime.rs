@@ -2,8 +2,10 @@ use crate::batman::{Batarang, Batman};
 use crate::sprites::get_sprites;
 use ggez::{Context, GameResult};
 use ggez::graphics::{Canvas, Color, DrawMode, DrawParam, Image, Mesh, Rect};
-use crate::game_defs::{ GRAVITY, Direction };
+use crate::game_defs::{ GRAVITY, Direction, EnemyReaction};
 use crate::enemies::enemy::{Enemy, Action};
+
+
 
 
 
@@ -36,7 +38,7 @@ pub struct Mime {
 }
 
 impl Mime {
-    pub fn new(x: f32, y:f32, ctx: &mut Context) -> Self{
+    pub fn new(x: f32, y:f32, move_speed: f32, ctx: &mut Context) -> Self{
         let walking_sprites   = get_sprites("Mime/walking", 4, "walking", ctx);
         let standing_sprites  = get_sprites("Mime/standing", 1, "standing", ctx);
         let attacking_sprites = get_sprites("Mime/kick", 4, "kick", ctx);
@@ -47,7 +49,29 @@ impl Mime {
 
 
 
-        Self{ rough_x: x, precise_x: x, y, walking_sprites, standing_sprites, attacking_sprites, dying_sprites, sleeping_sprites, knockback_sprites, backflip_sprites, action: Action::Standing, move_speed: 2.0, counter: 0.0, health: 100.0, death: 100.0, dead: false, direction: Direction::Right, knockout_counter: 0.0, attack_counter: 0.0, sleep_direction: Direction::Right, backflip_direction: Direction::Left } 
+        Self{ 
+            rough_x: x, 
+            precise_x: x, 
+            y, 
+            walking_sprites, 
+            standing_sprites, 
+            attacking_sprites, 
+            dying_sprites, 
+            sleeping_sprites, 
+            knockback_sprites, 
+            backflip_sprites, 
+            action: Action::Standing, 
+            move_speed, 
+            counter: 0.0, 
+            health: 100.0, 
+            death: 100.0, 
+            dead: false, 
+            direction: Direction::Right, 
+            knockout_counter: 0.0, 
+            attack_counter: 0.0, 
+            sleep_direction: Direction::Right, 
+            backflip_direction: Direction::Left 
+        } 
     }    
 }
 
@@ -78,12 +102,22 @@ impl Enemy for Mime {
         let enemy_on_right = batman.get_mid_point() < self.get_mid_point() && self.get_mid_point() < batman.get_mid_point() + 150.0;
 
         if batman.direction() == Direction::Left && enemy_on_left || batman.direction() == Direction::Right && enemy_on_right {
-            let knockback = batman.attack(&mut self.health);
-            
-            if knockback && self.action != Action::Knockback {
-                self.action = Action::Knockback;
-                self.counter = 0.0;
+            let hit_reaction = batman.attack(&mut self.health);
+
+
+            match hit_reaction {
+                EnemyReaction::Knockback => {
+                    if self.action != Action::Knockback{
+                        self.action = Action::Knockback;
+                        self.counter = 0.0;
+                    }
+                },
+
+                _ => {}
+
+
             }
+            
             if batman.is_attacking() && !matches!(self.action, Action::Backflip | Action::Sleep){
                 self.action = Action::Backflip;
                 self.counter = 0.0;
@@ -244,6 +278,14 @@ impl Enemy for Mime {
 
     fn get_drawn_y(&self) ->f32{
         self.get_y()
+    }
+
+    fn get_knockout_counter(&self)-> f32 {
+        self.knockout_counter
+    }
+
+    fn set_knockout_counter(&mut self, new_counter: f32) {
+        self.knockout_counter = new_counter;
     }
 
 

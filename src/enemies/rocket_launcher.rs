@@ -1,5 +1,5 @@
 use crate::batman::{Batarang, Batman};
-use crate::projectiles::Projectile;
+use crate::projectiles::{Projectiles, Rocket};
 use crate::sprites::get_sprites;
 use ggez::{Context, GameResult};
 use ggez::graphics::{Canvas, Color, DrawMode, DrawParam, Image, Mesh, Rect};
@@ -27,6 +27,7 @@ pub struct RocketGuy {
     pub attack_counter: f32,
     pub can_spawn_rocket: bool,
     pub attacking_sprites: Vec<Image>,
+    knockout_counter: f32,
     dying_sprites: Vec<Image>,
     standing_sprites: Vec<Image>,
 }
@@ -38,20 +39,31 @@ impl RocketGuy {
         let standing_sprites = get_sprites("Rocket Launcher/sit", 1, "sit", ctx);
 
 
-        Self{ rough_x: x, precise_x: x, y, dying_sprites, attacking_sprites, standing_sprites, action: Action::Standing, counter: 0.0, health: 100.0, death: 100.0, dead: false, direction: Direction::Right, sleep_direction: Direction::Right, attack_counter: 0.0, can_spawn_rocket: true }
+        Self{ 
+            rough_x: x,
+            precise_x: x,
+            y,
+            dying_sprites,
+            attacking_sprites,
+            standing_sprites,
+            action: Action::Standing,
+            knockout_counter: 0.0,
+            counter: 0.0,
+            health: 100.0,
+            death: 100.0,
+            dead: false,
+            direction: Direction::Right,
+            sleep_direction: Direction::Right,
+            attack_counter: 0.0,
+            can_spawn_rocket: true 
+        }
     }
 
-    pub fn add_rockets(&mut self, projectiles: &mut Vec<Projectile>){
+    pub fn add_rockets(&mut self, projectiles: &mut Vec<Projectiles>){
         if self.action == Action::Attacking && self.counter.round() == 1.0 && self.can_spawn_rocket{
             let x = if self.direction == Direction::Left{ self.precise_x + self.get_current_sprite().width() as f32} else {self.precise_x};
-            let rocket_res = Rocket::new(x, self.y, self.direction);
-            
-            let rocket = match rocket_res {
-                Ok(m)=> m,
-                Err(e)=>{println!("{}", e); return;}
-            };
-            
-            projectiles.push(Projectile::Rocket(rocket));
+            let rocket = Rocket::new(x, self.y, self.direction);
+            projectiles.push(Projectiles::Rocket(rocket));
             self.can_spawn_rocket = false;
 
 
@@ -201,56 +213,12 @@ impl Enemy for RocketGuy{
         rough_x + width + 50.0
     }
 
+    fn get_knockout_counter(&self)-> f32 {
+        self.knockout_counter
+    }
+
+    fn set_knockout_counter(&mut self, new_counter: f32) {
+        self.knockout_counter = new_counter;
+    }
+
 }
-
-pub struct Rocket{
-    x: f32,
-    y: f32,
-    direction: Direction,
-    move_speed: f32
-}
-
-
-impl Rocket {
-    fn new(x:f32, y:f32, direction: Direction)-> GameResult<Self>{
-        let adjusted_y = y + 40.0;
-        let x = if direction == Direction::Right { x -115.0 } else { x };
-        Ok( Self { x, y: adjusted_y, direction, move_speed: 10.0 } )
-    }
-
-    pub fn update(&mut self){
-        self.x += if self.direction == Direction::Left { -self.move_speed } else { self.move_speed };
-    }
-
-    pub fn draw(& mut self, canvas:&mut  Canvas, ctx: &Context)-> GameResult{
-        let bullet = Mesh::new_circle(ctx, DrawMode::fill(), [self.x, self.y], 25.0, 0.1, Color::from_rgb(0, 0, 0))?;
-
-        canvas.draw(&bullet, DrawParam::default()
-            .dest([0.0, 10.0])
-        );
-
-        Ok(())
-    }
-
-    pub fn is_offscreen(&self) -> bool{
-        if self.x > WIDTH || self.x < 0.0{ true } else { false }
-    }
-
-    pub fn hit_batman(&self, batman: &mut Batman)-> bool{
-        let batman_mid_point = batman.get_mid_point().round();
-        let bullet_x = self.x.round();
-        if bullet_x >= batman_mid_point - 20.0 && batman_mid_point + 20.0 >= bullet_x && batman.is_grounded(){
-            batman.take_damage(15.0);
-            true
-        }
-        else {
-            false
-        }
-    }
-}
-
-
-
-
-
-

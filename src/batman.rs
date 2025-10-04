@@ -1,9 +1,10 @@
-use ggez::{Context, GameResult};
-use ggez::graphics::{Canvas, Color, DrawMode, DrawParam, Image, Mesh, Rect};
+use ggez::Context;
+use ggez::graphics::{self, Canvas, Color, DrawMode, DrawParam, Image, Mesh, Rect};
 use ggez::input::keyboard::{self, KeyCode};
 
-use crate::sprites;
-use crate::game_defs::{ WIDTH, HEIGHT, GRAVITY, SCALE, Direction};
+use crate::sprites::get_sprites;
+use crate::game_defs::{ WIDTH, HEIGHT, GRAVITY, SCALE, Direction, EnemyReaction};
+use crate::ui_draw::UIDraw;
 
 
 
@@ -19,8 +20,10 @@ enum Action {
     Kicking1,
     Kicking2,
     Throwing,
-    SuperPunch
+    SuperPunch,
+    Stun
 }
+
 
 
 pub struct Batman {
@@ -38,6 +41,7 @@ pub struct Batman {
     kicking2_sprites: Vec<Image>,
     throwing_sprites: Vec<Image>,
     super_punch_sprites: Vec<Image>,
+    stun_sprites: Vec<Image>,
     counter: f32,
     action: Action,
     direction: Direction,
@@ -47,24 +51,25 @@ pub struct Batman {
     punching: bool,
     health: f32,
     death: f32,
-    can_spawn_batarang: bool
-    
+    can_spawn_batarang: bool,
+    stun_cooldown: f32
 }
 
 
 impl Batman {
-    pub fn new(x: f32, y: f32, move_speed: f32, ctx: &mut Context, health: f32) -> GameResult<Self>{
+    pub fn new(x: f32, y: f32, move_speed: f32, ctx: &mut Context, health: f32) -> Self{
 
-        let running_sprites:      Vec<Image> = sprites::get_sprites("Batman running", 22, "running", ctx);
-        let standing_sprites:     Vec<Image> = sprites::get_sprites("Batman standing", 16, "standing", ctx);
-        let jumping_sprites:      Vec<Image> = sprites::get_sprites("Batman jumping", 7, "jump", ctx);
-        let punching1_sprites:    Vec<Image> = sprites::get_sprites("Batman punching1", 11, "punch", ctx);
-        let punching2_sprites:    Vec<Image> = sprites::get_sprites("Batman punching2", 10, "punch", ctx);
-        let punching3_sprites:    Vec<Image> = sprites::get_sprites("Batman punching3", 10, "punch", ctx);
-        let kicking1_sprites:     Vec<Image> = sprites::get_sprites("Batman kicking1", 9, "kick", ctx);
-        let kicking2_sprites:     Vec<Image> = sprites::get_sprites("Batman kicking2", 10, "kick", ctx);
-        let throwing_sprites:     Vec<Image> = sprites::get_sprites("Batman Throwing", 19, "throw", ctx);
-        let super_punch_sprites:  Vec<Image> = sprites::get_sprites("Batman smoke", 13, "smoke", ctx);
+        let running_sprites:      Vec<Image> = get_sprites("Batman running", 22, "running", ctx);
+        let standing_sprites:     Vec<Image> = get_sprites("Batman standing", 16, "standing", ctx);
+        let jumping_sprites:      Vec<Image> = get_sprites("Batman jumping", 7, "jump", ctx);
+        let punching1_sprites:    Vec<Image> = get_sprites("Batman punching1", 11, "punch", ctx);
+        let punching2_sprites:    Vec<Image> = get_sprites("Batman punching2", 10, "punch", ctx);
+        let punching3_sprites:    Vec<Image> = get_sprites("Batman punching3", 10, "punch", ctx);
+        let kicking1_sprites:     Vec<Image> = get_sprites("Batman kicking1", 9, "kick", ctx);
+        let kicking2_sprites:     Vec<Image> = get_sprites("Batman kicking2", 10, "kick", ctx);
+        let throwing_sprites:     Vec<Image> = get_sprites("Batman Throwing", 19, "throw", ctx);
+        let stun_sprites:         Vec<Image> = get_sprites("Batman stun", 13, "stun", ctx);
+        let super_punch_sprites:  Vec<Image> = get_sprites("Batman super punch", 17, "super_punch", ctx);
         
         let batman = Self{ 
             x, 
@@ -81,6 +86,7 @@ impl Batman {
             kicking2_sprites,
             throwing_sprites,
             super_punch_sprites,
+            stun_sprites,
             counter: 0.0, 
             action: Action::Standing, 
             direction: Direction::Left, 
@@ -90,12 +96,13 @@ impl Batman {
             punching: false,
             health,
             death: health,
-            can_spawn_batarang: true
+            can_spawn_batarang: true,
+            stun_cooldown: 0.0
         }; 
-        Ok( batman )
+        batman 
     }
 
-    pub fn draw(& mut self, canvas:&mut  Canvas, ctx: &Context){
+    pub fn draw(& mut self, canvas:&mut  Canvas, ctx: &mut Context){
         let x = self.x;
         let y = self.y;
 
@@ -104,7 +111,10 @@ impl Batman {
         let move_right = x + width;
 
 
-        let (direction, x) = if self.action == Action::Running || self.action == Action::Throwing {
+        let (direction, x) = if matches!(self.action, Action::Running | 
+                                                                Action::Throwing | 
+                                                                Action::Stun | 
+                                                                Action::SuperPunch) {
             match self.direction {
                 Direction::Left  => (3.4, move_left),
                 Direction::Right => (-3.4, move_right),
@@ -125,25 +135,11 @@ impl Batman {
         let health = &self.health * 3.0;
         let death = &self.death * 3.0;
 
-        let health_bar_res = Mesh::new_rectangle(ctx, DrawMode::fill(), Rect::new(0.0, 0.0, health, 60.0), Color::from_rgb(0, 255, 0));
+        let mut health_bar = UIDraw::make_mesh(ctx, 0.0, 0.0, health, 60.0, Color::from_rgb(0, 255, 0));
+        health_bar.draw(canvas, [0.0, 10.0], [0.0, 10.0]);
+        
         let death_bar_res = Mesh::new_rectangle(ctx, DrawMode::fill(), Rect::new(0.0, 0.0, death, 60.0), Color::from_rgb(255, 0, 0));
-        let x_display = Mesh::new_rectangle(ctx, DrawMode::fill(), Rect::new(self.get_mid_point(), self.y, self.get_current_sprite().width() as f32 * 3.2, 60.0), Color::from_rgb(255, 0, 0));
 
-        let x = match x_display {
-            Ok(m) => m,
-            Err(e) => {
-                println!("{}", e);
-                return;
-            }
-        };
-
-        let health_bar = match health_bar_res {
-            Ok(m) => m,
-            Err(e) => {
-                println!("{}", e);
-                return;
-            }
-        };
 
         let death_bar = match death_bar_res {
             Ok(m) => m,
@@ -158,9 +154,41 @@ impl Batman {
         canvas.draw(&death_bar, DrawParam::default()
             .dest([0.0, 10.0])
         );
-        canvas.draw(&health_bar, DrawParam::default()
-            .dest([0.0, 10.0])
-        );
+        // canvas.draw(&health_bar, DrawParam::default()
+        //     .dest([0.0, 10.0])
+        // );
+
+        if self.stun_cooldown > 0.0{
+            self.stun_cooldown -= 0.05;
+
+            let stun_cooldown_bar_height = 100.0;
+            let stun_cooldown_bar_x = 20.0;
+            let stun_cooldown_bar_y = HEIGHT - stun_cooldown_bar_height;
+            
+            let stun_colldown_representaion = Mesh::new_rectangle(
+                                                    ctx, DrawMode::fill(), 
+                                                    Rect::new(stun_cooldown_bar_x, stun_cooldown_bar_y, 
+                                                    self.stun_cooldown * 10.0, stun_cooldown_bar_height), 
+                                                    Color::from_rgb(255, 0, 0));
+            let stun_cooldown_bar = match stun_colldown_representaion {
+                Ok(m) => m,
+                Err(e) => {
+                    println!("{}", e);
+                    return;
+                }
+            };
+            let cooldown_text = graphics::Text::new("Stun Cooldown".to_string());
+            
+            canvas.draw(&cooldown_text, DrawParam::default()
+                .dest([stun_cooldown_bar_x, stun_cooldown_bar_y - 30.0])
+                .scale([3.0, 3.0]));
+        
+            canvas.draw(&stun_cooldown_bar, DrawParam::default()
+                .dest([0.0, 10.0])
+            );
+        }
+
+
 
 
     }
@@ -193,7 +221,6 @@ impl Batman {
             }
             self.action = Action::Jumping;
             self.incr = 0.13;
-            
         }
         else if keyboard::is_key_pressed(ctx, KeyCode::Left) && self.x != 0.0 && self.x != WIDTH  { 
             self.x -= self.move_speed;
@@ -237,7 +264,12 @@ impl Batman {
             self.punching = true;
         }
         else if keyboard::is_key_pressed(ctx, KeyCode::D){
-            self.action = Action::SuperPunch;
+            if self.action != Action::SuperPunch{
+                self.counter = 0.0;
+                self.incr = 0.27;
+                self.action = Action::SuperPunch;
+            }
+            self.punching = true;
         }
         else if keyboard::is_key_pressed(ctx, KeyCode::S){
             if self.action == Action::Kicking1 && self.counter.round() as usize >= self.get_sprites().len()-5 {
@@ -266,22 +298,23 @@ impl Batman {
 
             if self.counter.round() as usize == 5 && self.can_spawn_batarang{
                 let x = if self.direction == Direction::Left {self.x +30.0} else {self.x + self.get_width() - 30.0};
-                let batarang_res = Batarang::new(x, self.y, self.direction, ctx);
-
-                let batarang = match batarang_res{
-                    Ok(m) => m,
-                    Err(e) => {
-                        println!("{}", e);
-                        return
-                    }
-                };
+                let batarang = Batarang::new(x, self.y, self.direction, ctx);
 
                 batarangs.push(batarang);
                 self.can_spawn_batarang = false;
             }
         }
+        else if keyboard::is_key_pressed(ctx, KeyCode::W) && self.stun_cooldown <= 0.0{
+            if self.action != Action::Stun {
+                self.counter = 0.0;
+            }
+            self.action = Action::Stun;
+        }
+        else if self.action == Action::Stun || self.punching{
+            // to catch if still active
+        }
         else { 
-            if self.is_grounded() && !self.punching {
+            if self.is_grounded() {
                 self.action = Action::Standing;
                 self.incr = 0.2;
             }
@@ -293,31 +326,35 @@ impl Batman {
 
 
 
-        if self.action != Action::Throwing{
+        if self.action != Action::Throwing {
             self.can_spawn_batarang = true;
         }
-
 
         self.counter += self.incr;
         self.jump();
     }
+    
 
-    pub fn get_current_sprite(&mut self)-> &Image{        
+    pub fn get_current_sprite(&mut self)-> &Image {        
         let a = self.counter.round() as usize;
         let length = self.get_sprites().len();
         if a >= length {
-            if self.action != Action::Running{
-                self.counter = 0.0;
-            }
             if self.action == Action::Throwing{
                 self.action = Action::Standing;
                 self.can_spawn_batarang = true;
             }
+            if self.action == Action::Stun{
+                self.stun_cooldown = 30.0;
+                self.action = Action::Standing
+            }
+            if self.action != Action::Running{
+                self.counter = 0.0;
+            }
         }
-
 
         &self.get_sprites()[self.counter.round() as usize]
     }
+    
 
     fn get_sprites(&self) -> &Vec<Image>{
         match self.action {
@@ -330,7 +367,8 @@ impl Batman {
             Action::Kicking1   => &self.kicking1_sprites,
             Action::Kicking2   => &self.kicking2_sprites,
             Action::Throwing   => &self.throwing_sprites,
-            Action::SuperPunch => &self.super_punch_sprites
+            Action::SuperPunch => &self.super_punch_sprites,
+            Action::Stun       => &self.stun_sprites
         }
     }
     
@@ -341,7 +379,6 @@ impl Batman {
                 self.jump_speed -= 1.0;
             }
         }
-
     }
 
     pub fn get_x(&self)-> f32{
@@ -368,34 +405,42 @@ impl Batman {
 
     }
 
-    pub fn attack(&mut self, enemy_health:&mut f32)->bool{
-        let hit_damage = 3.0;
-        let kick_damage = 5.0;
+    pub fn attack(&mut self, enemy_health:&mut f32)->EnemyReaction{
+        let hit_damage = 30.0;
+        let kick_damage = 50.0;
         if self.action == Action::Punching1 && self.counter.round() as usize == 2 {
             *enemy_health -= hit_damage;
-            return true
+            return EnemyReaction::Unfazed;
         }
         if self.action == Action::Punching2 && self.counter.round() as usize == 2 {
             *enemy_health -= hit_damage;
-            return true
+            return EnemyReaction::Unfazed;
         }
         if self.action == Action::Punching3 && self.counter.round() as usize == 2 {
             *enemy_health -= kick_damage;
-            return true
+            return EnemyReaction::Unfazed;
         }
         if self.action == Action::Kicking1 && self.counter.round() as usize == 2{
             *enemy_health -= kick_damage;
-            return true
+            return EnemyReaction::Unfazed;
         }
         if self.action == Action::Kicking2 && self.counter.round() as usize == 2{
             *enemy_health -= kick_damage;
-            return true
+            return EnemyReaction::Unfazed;
         }
-        if self.action == Action::Throwing && self.counter.round() as usize == 4{
-                
+        if self.action == Action::SuperPunch && self.counter.round() as usize == 2{
+            *enemy_health -= kick_damage;
+            return EnemyReaction::Unfazed;
         }
-        false
+        EnemyReaction::Unfazed
 
+    }
+
+    pub fn stun_grenade(&mut self)-> EnemyReaction{
+        if self.action == Action::Stun && self.counter.round() as usize == 4{
+            return EnemyReaction::GrenadeKnockout;
+        }
+        EnemyReaction::Unfazed
     }
     
 
@@ -411,6 +456,10 @@ impl Batman {
 
     pub fn is_attacking(&self)-> bool{
         matches!(self.action, Action::Kicking1 | Action::Punching1 | Action::Punching2 | Action::Punching3 | Action::Kicking2)
+    }
+
+    pub fn reset_health(&mut self){
+        self.health = self.death;
     }
 
 }
@@ -430,11 +479,19 @@ pub struct Batarang {
 
 
 impl Batarang {
-    fn new(x: f32, y: f32, direction: Direction, ctx: &mut Context)->GameResult<Self>{
+    fn new(x: f32, y: f32, direction: Direction, ctx: &mut Context)->Self{
         let adjusted_y = y + 55.0;
-        let sprites: Vec<Image> = sprites::get_sprites("Batarang", 4, "batarang", ctx);
+        let sprites: Vec<Image> = get_sprites("Batarang", 4, "batarang", ctx);
         let scale = if direction == Direction::Left { -SCALE } else { SCALE };
-        Ok(Self{ x, y: adjusted_y, counter: 0.0, move_speed: 15.0, direction, sprites, scale })
+        Self { 
+            x, 
+            y: adjusted_y, 
+            counter: 0.0, 
+            move_speed: 15.0, 
+            direction, 
+            sprites, 
+            scale 
+        }
     }
 
     pub fn draw(&mut self, canvas:&mut  Canvas){
@@ -443,8 +500,8 @@ impl Batarang {
 
         canvas.draw(self.get_current_sprite(), DrawParam::default()
             .dest([self.x, self.y])
-            .scale([self.scale, 3.4]));   
-    }
+            .scale([self.scale, 3.4]));
+        }
 
     pub fn update(&mut self){
         self.x += if self.direction == Direction::Left { -self.move_speed } else { self.move_speed };
@@ -465,4 +522,5 @@ impl Batarang {
     pub fn get_x(&self)-> f32{
         self.x
     }
+
 }

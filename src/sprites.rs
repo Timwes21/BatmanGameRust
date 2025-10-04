@@ -1,5 +1,5 @@
 use ggez::graphics::Image;
-use ggez::{Context, GameResult};
+use ggez::Context;
 
 
 pub fn get_sprites(folder_path: &str, num_of_sprites: i32, sprite_name: &str, _ctx: &mut Context ) -> Vec<Image>{

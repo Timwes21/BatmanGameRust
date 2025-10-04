@@ -28,18 +28,37 @@ pub struct KnifeGuy {
     pub attacking_sprites: Vec<Image>,
     dying_sprites: Vec<Image>,
     sleeping_sprites: Vec<Image>,
+    knockout_counter: f32
 }
 
 impl KnifeGuy {
-    pub fn new(x: f32, y:f32, ctx: &mut Context) -> Self{
+    pub fn new(x: f32, y:f32, move_speed: f32, ctx: &mut Context) -> Self{
         let walking_sprites   = get_sprites("Knife Guy/walking", 4, "walking", ctx);
         let standing_sprites  = get_sprites("Knife Guy/standing", 1, "standing", ctx);
         let attacking_sprites = get_sprites("Knife Guy/stabbing", 5, "stab", ctx);
-        let dying_sprites     = get_sprites("Knife Guy/die", 6, "die", ctx);
+        let dying_sprites     = get_sprites("Knife Guy/die", 4, "die", ctx);
         let sleeping_sprites  = get_sprites("Knife Guy/sleep", 1, "sleep", ctx);
 
 
-        Self{ rough_x: x, precise_x: x, y, walking_sprites, standing_sprites, attacking_sprites, dying_sprites, sleeping_sprites, action: Action::Standing, move_speed: 2.0, counter: 0.0, health: 100.0, death: 100.0, dead: false, direction: Direction::Right, sleep_direction: Direction::Right }
+        Self{ 
+            rough_x: x, 
+            precise_x: x, 
+            y, 
+            walking_sprites, 
+            standing_sprites, 
+            attacking_sprites, 
+            dying_sprites, 
+            sleeping_sprites, 
+            knockout_counter: 0.0,
+            action: Action::Standing, 
+            move_speed, 
+            counter: 0.0, 
+            health: 100.0, 
+            death: 100.0, 
+            dead: false, 
+            direction: Direction::Right, 
+            sleep_direction: Direction::Right 
+        }
     }    
 }
 
@@ -76,9 +95,7 @@ impl Enemy for KnifeGuy{
             self.action = Action::Dying;
         }
         else if self.action == Action::Knockout || self.action == Action::Sleep {
-            if self.counter.round() as usize >= self.get_sprites().len()-1 {
-                self.action = Action::Standing;
-            }
+            self.knockout(20.0);
         }
         else if enemy_in_detection_range_left || enemy_in_detection_range_right {
             self.rough_x += if enemy_in_detection_range_left { self.move_speed } else { -self.move_speed };
@@ -94,8 +111,7 @@ impl Enemy for KnifeGuy{
             }
             else if self.rough_x > batman.get_mid_point() && batman.direction() == Direction::Right{
                 batman.attack(&mut self.health);
-            }
-            
+            } 
         }
         else {
             self.action = Action::Standing;
@@ -123,8 +139,7 @@ impl Enemy for KnifeGuy{
     fn end_conditions(&mut self) {
         match self.action {
             Action::Dying => self.dead = true,
-            Action::Knockout => self.action = Action::Sleep,
-            Action::Sleep => self.action = Action::Standing,
+            Action::Knockout  => { self.set_action(Action::Sleep); self.sleep_direction = self.direction; },
             _ => {}
         }
     }
@@ -207,6 +222,14 @@ impl Enemy for KnifeGuy{
 
     fn get_drawn_y(&self) ->f32{
         self.get_y()
+    }
+
+    fn get_knockout_counter(&self)-> f32 {
+        self.knockout_counter
+    }
+
+    fn set_knockout_counter(&mut self, new_counter: f32) {
+        self.knockout_counter = new_counter;
     }
 
 

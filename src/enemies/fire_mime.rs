@@ -1,8 +1,8 @@
-use crate::batman::{Batarang, Batman};
+use crate::batman::Batman;
 use crate::sprites::get_sprites;
-use ggez::{Context, GameResult};
-use ggez::graphics::{Canvas, Color, DrawMode, DrawParam, Image, Mesh, Rect};
-use crate::game_defs::{ GRAVITY, Direction };
+use ggez::Context;
+use ggez::graphics::Image;
+use crate::game_defs::Direction;
 use crate::enemies::enemy::{Enemy, Action};
 
 
@@ -25,7 +25,6 @@ pub struct FireMime {
     pub knockout_counter: f32,
     pub attack_counter: f32,
     pub sleep_direction: Direction,
-    pub backflip_direction: Direction,
     pub attacking_sprites: Vec<Image>,
     standing_sprites: Vec<Image>,
     dying_sprites: Vec<Image>,
@@ -33,7 +32,7 @@ pub struct FireMime {
 }
 
 impl FireMime {
-    pub fn new(x: f32, y:f32, ctx: &mut Context) -> Self{
+    pub fn new(x: f32, y:f32, move_speed: f32, ctx: &mut Context) -> Self{
         let standing_sprites  = get_sprites("Fire Mime/standing", 1, "standing", ctx);
         let attacking_sprites = get_sprites("Fire Mime/flame", 11, "flame", ctx);
         let dying_sprites     = get_sprites("Fire Mime/die", 3, "die", ctx);
@@ -41,7 +40,26 @@ impl FireMime {
 
 
 
-        Self{ rough_x: x, precise_x: x, y, standing_sprites, attacking_sprites, dying_sprites, sleeping_sprites, action: Action::Standing, move_speed: 2.0, counter: 0.0, health: 100.0, death: 100.0, dead: false, direction: Direction::Right, knockout_counter: 0.0, attack_counter: 0.0, sleep_direction: Direction::Right, backflip_direction: Direction::Left } 
+
+        Self{ 
+            rough_x: x, 
+            precise_x: x, 
+            y, 
+            standing_sprites, 
+            attacking_sprites, 
+            dying_sprites, 
+            sleeping_sprites, 
+            action: Action::Standing, 
+            move_speed, 
+            counter: 0.0, 
+            health: 100.0, 
+            death: 100.0, 
+            dead: false, 
+            direction: Direction::Right, 
+            knockout_counter: 0.0, 
+            attack_counter: 0.0, 
+            sleep_direction: Direction::Right, 
+        } 
     }    
 }
 
@@ -81,13 +99,7 @@ impl Enemy for FireMime {
             self.action = Action::Dying;
         }
         else if self.action == Action::Knockout || self.action == Action::Sleep {
-            if self.action == Action::Sleep {
-                self.knockout_counter += 0.2;
-                if self.knockout_counter >= 20.0 {
-                    self.action = Action::Standing;
-                    self.knockout_counter = 0.0;
-                }
-            }
+            self.knockout(20.0);
         }
         else if self.attack_counter.round() >= 20.0 && self.get_mid_point() + 250.0 >= batman.get_mid_point() && self.get_mid_point() - 270.0 <= batman.get_mid_point(){
             self.action = Action::Attacking;
@@ -218,6 +230,14 @@ impl Enemy for FireMime {
 
     fn get_drawn_y(&self) ->f32{
         self.get_y()
+    }
+
+    fn get_knockout_counter(&self)-> f32 {
+        self.knockout_counter
+    }
+
+    fn set_knockout_counter(&mut self, new_counter: f32) {
+        self.knockout_counter = new_counter;
     }
 
 

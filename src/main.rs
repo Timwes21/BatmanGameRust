@@ -9,8 +9,7 @@ mod sprites;
 mod game;
 mod enemies;
 mod projectiles;
-
-
+mod ui_draw;
 use crate::game_defs::{WIDTH, HEIGHT};
 
 

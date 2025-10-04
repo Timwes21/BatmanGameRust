@@ -7,11 +7,11 @@ pub mod rocket_launcher;
 pub mod fire_mime;
 pub mod axe_guy;
 
-pub use gun_guy::{GunGuy, Bullet};
+pub use gun_guy::GunGuy;
 pub use knife_guy::KnifeGuy;
 pub use mime::Mime;
-pub use enemy::{Enemy, Action, EnemyBase};
+pub use enemy::{Enemy, Action};
 pub use enemies::Enemies;
-pub use rocket_launcher::{RocketGuy, Rocket};
+pub use rocket_launcher::RocketGuy;
 pub use fire_mime::FireMime;
-pub use axe_guy::{AxeGuy, Axe};
+pub use axe_guy::AxeGuy;

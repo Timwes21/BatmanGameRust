@@ -4,8 +4,8 @@ use ggez::{Context, GameResult};
 use ggez::graphics::{Canvas, Color, DrawMode, DrawParam, Image, Mesh, MeshBuilder, Rect};
 use crate::game_defs::{ GRAVITY, Direction };
 use crate::enemies::enemy::{Enemy, Action};
-use crate::game_defs::WIDTH;
-use crate::projectiles::{self, Projectile};
+use crate::game_defs::{WIDTH, EnemyReaction};
+use crate::projectiles::{self, Projectiles, Bullet};
 
 
 
@@ -32,7 +32,7 @@ pub struct GunGuy {
 }
 
 impl GunGuy {
-    pub fn new(x: f32, y:f32, ctx: &mut Context) -> Self{
+    pub fn new(x: f32, y:f32, move_speed: f32, ctx: &mut Context) -> Self{
         let walking_sprites   = get_sprites("Gun Guy/walking", 4, "walking", ctx);
         let standing_sprites  = get_sprites("Gun Guy/standing", 1, "standing", ctx);
         let attacking_sprites = get_sprites("Gun Guy/shooting", 3, "shooting", ctx);
@@ -41,20 +41,35 @@ impl GunGuy {
         let knockback_sprites = get_sprites("Gun Guy/knockback", 3, "knockback", ctx);
 
 
-        Self{ rough_x: x, precise_x: x, y, walking_sprites, standing_sprites, attacking_sprites, dying_sprites, sleeping_sprites, knockback_sprites, action: Action::Standing, move_speed: 2.0, counter: 0.0, health: 100.0, death: 100.0, dead: false, shooting_interval: 0.0, direction: Direction::Left, knockout_counter: 0.0, sleep_direction: Direction::Left }
+        Self{ 
+            rough_x: x, 
+            precise_x: x,
+            y,
+            walking_sprites,
+            standing_sprites,
+            attacking_sprites,
+            dying_sprites,
+            sleeping_sprites,
+            knockback_sprites,
+            action: Action::Standing,
+            move_speed,
+            counter: 0.0,
+            health: 100.0,
+            death: 100.0,
+            dead: false,
+            shooting_interval: 0.0,
+            direction: Direction::Left,
+            knockout_counter: 0.0,
+            sleep_direction: Direction::Left
+        }
     }    
 
-    pub fn add_bullets(&mut self, projectiles: &mut Vec<Projectile>){
+    pub fn add_bullets(&mut self, projectiles: &mut Vec<Projectiles>){
         if self.action == Action::Attacking && self.counter.round() == 1.0{
             let x = if self.direction == Direction::Left{ self.precise_x + self.get_current_sprite().width() as f32} else {self.precise_x};
-            let bullet_res = Bullet::new(x, self.y, self.direction);
+            let bullet = Bullet::new(x, self.y, self.direction);
             
-            let bullet = match bullet_res {
-                Ok(m) => m,
-                Err(e) =>{println!("{}", e); return;}
-            };
-            
-            projectiles.push(Projectile::Bullet(bullet));
+            projectiles.push(Projectiles::Bullet(bullet));
 
 
         }
@@ -86,11 +101,20 @@ impl Enemy for GunGuy{
         
         
         if batman.direction() == Direction::Left && enemy_on_left || batman.direction() == Direction::Right && enemy_on_right {
-            let knockback = batman.attack(&mut self.health);
-            
-            if knockback && self.action != Action::Knockback {
-                self.action = Action::Knockback;
-                self.counter = 0.0;
+            let hit_reaction = batman.attack(&mut self.health);
+
+
+            match hit_reaction {
+                EnemyReaction::Knockback => {
+                    if self.action != Action::Knockback{
+                        self.action = Action::Knockback;
+                        self.counter = 0.0;
+                    }
+                },
+
+                _ => {}
+
+
             }
         }
         
@@ -239,53 +263,15 @@ impl Enemy for GunGuy{
         self.get_y() + 25.0
     }
 
+    fn get_knockout_counter(&self)-> f32 {
+        self.knockout_counter
+    }
+
+    fn set_knockout_counter(&mut self, new_counter: f32) {
+        self.knockout_counter = new_counter;
+    }
+
 
 }
 
 
-
-
-pub struct Bullet{
-    x: f32,
-    y: f32,
-    direction: Direction,
-    move_speed: f32
-}
-
-
-impl Bullet {
-    fn new(x:f32, y:f32, direction: Direction)-> GameResult<Self>{
-        let adjusted_y = y + 30.0;
-        Ok(Self { x, y: adjusted_y, direction, move_speed: 10.0 })
-    }
-
-    pub fn update(&mut self){
-        self.x += if self.direction == Direction::Left { -self.move_speed } else { self.move_speed };
-    }
-
-    pub fn draw(& mut self, canvas:&mut  Canvas, ctx: &Context)-> GameResult{
-        let bullet = Mesh::new_circle(ctx, DrawMode::fill(), [self.x, self.y], 15.0, 0.1, Color::from_rgb(0, 0, 0))?;
-
-        canvas.draw(&bullet, DrawParam::default()
-            .dest([0.0, 10.0])
-        );
-
-        Ok(())
-    }
-
-    pub fn is_offscreen(&self) -> bool{
-        if self.x > WIDTH || self.x < 0.0{ true } else { false }
-    }
-
-    pub fn hit_batman(&self, batman: &mut Batman)-> bool{
-        let batman_mid_point = batman.get_mid_point().round();
-        let bullet_x = self.x.round();
-        if bullet_x >= batman_mid_point - 20.0 && batman_mid_point + 20.0 >= bullet_x && batman.is_grounded(){
-            batman.take_damage(0.8);
-            true
-        }
-        else {
-            false
-        }
-    }
-}

@@ -3,7 +3,7 @@ use crate::enemies::{knife_guy, GunGuy, KnifeGuy, Mime, RocketGuy, Enemies};
 use crate::sprites::get_sprites;
 use ggez::{Context, GameResult};
 use ggez::graphics::{Canvas, Color, DrawMode, DrawParam, Image, Mesh, Rect};
-use crate::game_defs::{ GRAVITY, Direction };
+use crate::game_defs::{ GRAVITY, Direction, EnemyReaction };
 
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -18,23 +18,6 @@ pub enum Action {
     Knockback,
     Backflip,
     Throwing
-}
-
-
-
-pub struct EnemyBase {
-    pub rough_x: f32,
-    pub precise_x: f32,
-    pub y: f32,
-    pub action: Action,
-    pub knockout_counter: f32,
-    pub move_speed: f32,
-    pub counter: f32,
-    pub health: f32,
-    pub death: f32,
-    pub dead: bool,
-    pub direction: Direction,
-    pub sleep_direction: Direction,
 }
 
 
@@ -74,12 +57,11 @@ pub trait Enemy {
                 if self.get_action() == Action::Attacking && self.get_counter().round() >= 2.0 {
                     let diff = (self.get_attacking_sprites()[2].width() - self.get_attacking_sprites()[0].width()) as f32;
                     let new_precise_x = self.get_precise_x() - diff * 3.2;
-                    enemy.precise_x = new_precise_x;
+                    self.set_precise_x(new_precise_x);
                 }
                 self.set_direction(Direction::Left);
                 3.2
             }
-            
         };
         
 
@@ -144,9 +126,18 @@ pub trait Enemy {
     }
 
     fn update(& mut self, ground_height: f32, batman:&mut Batman, batarang_xs: &Vec<f32>){
+        self.grenade_knockout(batman);
         self.gravity(ground_height);
         self.check_for_batarang_damage(batarang_xs);
         self.movement(batman);
+    }
+
+    fn grenade_knockout(&mut self, batman:&mut Batman){
+        if batman.stun_grenade() == EnemyReaction::GrenadeKnockout{
+            if self.get_mid_point() > batman.get_mid_point() - 400.0 && self.get_mid_point() < batman.get_mid_point() + 400.0{
+                self.set_action(Action::Knockout);
+            }
+        }
     }
         
 
@@ -169,7 +160,7 @@ pub trait Enemy {
             if i.round() >= x-10.0 && i.round() <= x+10.0 {    
                 let new_action = Action::Knockout;
                 self.set_action(new_action);
-                let new_health = self.get_health() - 1.0;
+                let new_health = self.get_health() - 150.0;
                 self.set_health(new_health);
                 self.reset_counter();
             }
@@ -179,17 +170,6 @@ pub trait Enemy {
     fn get_mid_point(&mut self)-> f32{
         self.get_rough_x() + (self.get_current_sprite().width() as f32 * 3.4)/2.0
     }    
-
-    fn batman_attack(&mut self, batman: &mut Batman, enemy_on_left: bool, enemy_on_right: bool){
-        if batman.direction() == Direction::Left && enemy_on_left || batman.direction() == Direction::Right && enemy_on_right {
-            let knockback = batman.attack(&mut self.get_health());
-            
-            if knockback && self.get_action() != Action::Knockback {
-                self.set_action(Action::Knockback);
-                self.set_counter(0.0);
-            }
-        }
-    }
 
     fn get_width(&mut self)->f32{
         self.get_current_sprite().width() as f32 * 3.2
@@ -220,7 +200,20 @@ pub trait Enemy {
         &self.get_sprites()[self.get_counter().round() as usize]
     }
 
-    fn get_enemy_base(&mut self) -> EnemyBase;
+    fn knockout(&mut self, limit: f32){
+        if self.get_action() == Action::Sleep {
+            self.set_knockout_counter(self.get_knockout_counter() + 0.2);
+            if self.get_knockout_counter() >= limit {
+                self.set_action(Action::Standing);
+                self.set_knockout_counter(0.0);
+            }
+        }
+    }
+
+    fn set_random_move_speed(&self){
+        
+    }
+
 
     fn end_conditions(&mut self);
 
@@ -268,6 +261,10 @@ pub trait Enemy {
     fn get_sleep_direction(&self)-> Direction;
 
     fn get_drawn_y(&self) ->f32;
+
+    fn get_knockout_counter(&self)-> f32;
+
+    fn set_knockout_counter(&mut self, new_counter: f32);
 
 
 
